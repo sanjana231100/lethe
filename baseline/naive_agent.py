@@ -52,9 +52,12 @@ async def main(steps: int, max_tokens: int) -> None:
     llm = UnboundedLLM(make_llm(settings, purpose="chief"))
     nimble = make_nimble(settings)
     history: list[dict[str, str]] = []
+    print(f"naive baseline: {steps} steps over {len(units)} units, appending everything to one history. "
+          f"Each step = live Nimble fetch + one LLM call on the whole history (rate-limited, so steps take 10-60s).")
     await log.emit("naive", "started", payload={"steps": steps, "units": [u.unit_id for u in units]})
     for step in range(steps):
         unit = units[step % len(units)]
+        print(f"step {step + 1}/{steps}: {unit.label} ... history so far: {sum(count_tokens(m['content']) for m in history)} tokens", flush=True)
         MockNimble.set_cycle(step // len(units))
         query = f"{unit.year} {unit.make} {unit.model} {unit.trim} for sale"
         try:
@@ -72,7 +75,13 @@ async def main(steps: int, max_tokens: int) -> None:
         if prompt_tokens > max_tokens:
             await log.emit("naive", "context_overflow", unit_id=unit.unit_id, payload={"step": step + 1, "prompt_tokens": prompt_tokens, "limit": max_tokens})
             break
-        res = await llm.complete(NAIVE_SYSTEM, history, meta={"payload": {"suggested": unit.our_price, "next_unit": unit.unit_id}})
+        try:
+            res = await llm.complete(NAIVE_SYSTEM, history, meta={"payload": {"suggested": unit.our_price, "next_unit": unit.unit_id}})
+        except Exception as exc:  # e.g. provider refuses the oversized prompt: that *is* the wall
+            await log.emit("naive", "context_overflow", unit_id=unit.unit_id,
+                           payload={"step": step + 1, "prompt_tokens": prompt_tokens, "error": f"{type(exc).__name__}: {exc}"[:300]})
+            print(f"stopped at step {step + 1}: the provider refused a {prompt_tokens}-token prompt ({type(exc).__name__}). That's the wall.")
+            break
         await log.emit("naive", "llm_call", unit_id=unit.unit_id, payload={"role": "naive", "step": step + 1, "history_messages": len(history)},
                        input_tokens=res.input_tokens, output_tokens=res.output_tokens, latency_ms=res.latency_ms, model=res.model)
         history.append({"role": "assistant", "content": res.text})
