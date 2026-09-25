@@ -1,0 +1,5 @@
+.env
+.venv/
+.lethe_state/
+__pycache__/
+*.pyc

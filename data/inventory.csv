@@ -1,0 +1,11 @@
+unit_id,year,make,model,trim,category,mileage,our_price,location,state
+U01,2022,Winnebago,Solis,59P,class_b,18400,82900,Sacramento,CA
+U02,2021,Thor,Four Winds,28A,class_c,27600,79900,Denver,CO
+U03,2020,Airstream,Flying Cloud,25FB,travel_trailer,0,69900,Austin,TX
+U04,2021,Ford,F-250,Lariat 4x4,truck,41200,54900,Phoenix,AZ
+U05,2023,Winnebago,View,24D,class_c,9800,139900,Tampa,FL
+U06,2019,Grand Design,Imagine,2500RL,travel_trailer,0,29900,Dallas,TX
+U07,2022,Storyteller Overland,MODE 4x4,LT,class_b,14100,149900,Seattle,WA
+U08,2020,Ram,2500,Laramie 4x4,truck,52300,46900,Austin,TX
+U09,2021,Jayco,Redhawk,26XD,class_c,22900,79900,Los Angeles,CA
+U10,2018,Forest River,Rockwood Mini Lite,2509S,travel_trailer,0,21900,Orlando,FL

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lethe · agents that forget on purpose</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0a0a0a; --panel:#141414; --panel2:#1b1b1b; --line:#2a2a2a; --text:#f2f2f2; --muted:#9a9a9a; --accent:#c8ff00; --hot:#ff7a00; --good:#c8ff00; --warn:#ffb020; --bad:#ff4d4d; --naive:#ff4d4d; --lethe:#c8ff00; --canon:#7dd3fc; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Space Grotesk", ui-sans-serif, system-ui, sans-serif; font-size:18px;
+         background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 48px 48px; background-position: -1px -1px; }
+  .mono { font-family:"JetBrains Mono", ui-monospace, monospace; }
+  header { display:flex; align-items:center; gap:20px; padding:18px 28px 10px; border-bottom:2px solid var(--accent); background:var(--bg); }
+  header h1 { margin:0; font-size:40px; letter-spacing:-.02em; font-weight:700; text-transform:uppercase; }
+  header h1 span { color:var(--accent); }
+  header .tag { color:var(--muted); font-size:15px; font-family:"JetBrains Mono", monospace; }
+  header .mode { margin-left:auto; color:var(--accent); font-size:13px; font-family:"JetBrains Mono", monospace; border:1px solid var(--accent); padding:4px 10px; border-radius:2px; }
+  .hero { display:grid; grid-template-columns: repeat(6, 1fr); gap:0; padding:0 28px; margin-top:14px; border:1px solid var(--line); background:var(--panel); }
+  .stat { padding:14px 18px; border-right:1px solid var(--line); }
+  .stat:last-child { border-right:none; }
+  .stat .v { font-size:40px; font-weight:600; line-height:1; font-family:"JetBrains Mono", monospace; color:var(--accent); }
+  .stat .l { color:var(--muted); font-size:12px; margin-top:8px; text-transform:uppercase; letter-spacing:.14em; font-family:"JetBrains Mono", monospace; }
+  .grid { display:grid; grid-template-columns: 1.25fr 1fr; gap:14px; padding:14px 28px 28px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-top:3px solid var(--hot); padding:14px 16px; min-height:220px; }
+  .panel h2 { margin:0 0 10px; font-size:13px; color:var(--hot); text-transform:uppercase; letter-spacing:.16em; font-weight:600; font-family:"JetBrains Mono", monospace; }
+  .panel h2 b { color:var(--text); font-weight:500; text-transform:none; letter-spacing:0; font-size:15px; margin-left:10px; font-family:"Space Grotesk", sans-serif; }
+  .wide { grid-column: 1 / -1; }
+  .board { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; }
+  .col h3 { margin:0 0 8px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; display:flex; justify-content:space-between; font-family:"JetBrains Mono", monospace; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .col h3 i { font-style:normal; color:var(--text); }
+  .card { background:var(--panel2); border:1px solid var(--line); border-radius:2px; padding:10px 12px; margin-bottom:8px; position:relative; }
+  .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent); }
+  .card .t { font-weight:700; font-size:16px; }
+  .card .p { font-size:26px; font-weight:600; margin:6px 0 2px; font-family:"JetBrains Mono", monospace; }
+  .card .p small { font-size:13px; color:var(--muted); font-weight:400; }
+  .card .m { color:var(--muted); font-size:12px; font-family:"JetBrains Mono", monospace; }
+  .card .r { color:#cfcfcf; font-size:13px; margin-top:6px; line-height:1.35; }
+  .col.scouting .card::before { background:var(--canon); } .col.needs_verify .card::before { background:var(--warn); }
+  .col.verified .card::before { background:var(--good); } .col.action .card::before { background:var(--hot); } .col.stale .card::before { background:var(--bad); }
+  .feed { list-style:none; margin:0; padding:0; max-height:330px; overflow:auto; font-size:14px; font-family:"JetBrains Mono", monospace; }
+  .feed li { padding:6px 0; border-bottom:1px dashed var(--line); display:flex; gap:12px; align-items:baseline; }
+  .feed .ts { color:var(--muted); font-variant-numeric: tabular-nums; font-size:12px; min-width:64px; }
+  .feed .k { font-weight:600; font-size:11px; letter-spacing:.1em; text-transform:uppercase; min-width:118px; }
+  .k.fact_evicted, .k.fact_expired { color:var(--bad); } .k.fact_contradicted { color:var(--warn); } .k.fact_promoted { color:var(--canon); } .k.fact_superseded { color:var(--accent); }
+  .k.lesson { color:var(--warn); } .k.strategy_changed { color:var(--canon); } .k.self_correction { color:var(--accent); }
+  .chartbox { position:relative; height:300px; }
+  .up { color:var(--accent); } .down { color:var(--bad); }
+  .foot { color:var(--muted); font-size:12px; padding:0 28px 20px; font-family:"JetBrains Mono", monospace; letter-spacing:.06em; text-transform:uppercase; }
+  @media (max-width: 1100px) { .hero { grid-template-columns: repeat(3,1fr);} .stat { border-bottom:1px solid var(--line);} .grid { grid-template-columns: 1fr; } .board { grid-template-columns: repeat(2,1fr);} }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Lethe</span> · agents that forget on purpose</h1>
+  <div class="tag">explicit state · self-edited context · expiring memory · live web pricing mission</div>
+  <div class="mode" id="mode">…</div>
+</header>
+
+<section class="hero">
+  <div class="stat"><div class="v" id="since">–</div><div class="l">running since</div></div>
+  <div class="stat"><div class="v" id="cycles">0</div><div class="l">cycles</div></div>
+  <div class="stat"><div class="v" id="steps">0</div><div class="l">steps</div></div>
+  <div class="stat"><div class="v" id="pages">0</div><div class="l">pages read</div></div>
+  <div class="stat"><div class="v" id="maxtok">0</div><div class="l">max context (tokens)</div></div>
+  <div class="stat"><div class="v" id="cost">$0</div><div class="l">est. LLM cost</div></div>
+</section>
+
+<section class="grid">
+  <div class="panel">
+    <h2>Input tokens per LLM call <b id="tokhead"></b></h2>
+    <div class="chartbox"><canvas id="tokens"></canvas></div>
+  </div>
+  <div class="panel">
+    <h2>Persist vs. discard <b id="lifehead"></b></h2>
+    <div class="chartbox"><canvas id="lifecycle"></canvas></div>
+  </div>
+
+  <div class="panel wide">
+    <h2>Board <b>position derived from facts, never set by hand</b></h2>
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="panel">
+    <h2>What it forgot, and why <b id="memhead"></b></h2>
+    <ul class="feed" id="memfeed"></ul>
+  </div>
+  <div class="panel">
+    <h2>Lessons · self-corrections</h2>
+    <ul class="feed" id="lessons"></ul>
+  </div>
+</section>
+<div class="foot" id="foot">Nimble = eyes · Liquid LFM2.5 = decides what persists · RawTree = state + observability · refresh 5s</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt$ = (n) => n ? '$' + Math.round(n).toLocaleString() : '–';
+const api = async (p, q = {}) => { const u = new URL('/api/' + p, location.origin); Object.entries(q).forEach(([k, v]) => v != null && u.searchParams.set(k, v)); const r = await fetch(u); return (await r.json()).data || []; };
+const hhmm = (ts) => ts ? ts.slice(11, 16) : '–';
+const hhmmss = (ts) => ts ? ts.slice(11, 19) : '';
+const COLS = ['scouting', 'needs_verify', 'verified', 'action', 'stale'];
+const NAMES = { scouting: 'Scouting', needs_verify: 'Needs verify', verified: 'Verified', action: 'Action', stale: 'Stale' };
+
+const tokChart = new Chart($('tokens'), { type: 'line', data: { datasets: [
+  { label: 'Lethe (bounded)', data: [], borderColor: '#c8ff00', backgroundColor: '#c8ff0022', pointRadius: 0, borderWidth: 2.5, tension: .2, fill: true },
+  { label: 'Naive (append everything)', data: [], borderColor: '#ff4d4d', backgroundColor: '#ff4d4d22', pointRadius: 0, borderWidth: 2.5, tension: .2, fill: true },
+  { label: 'budget', data: [], borderColor: '#9a9a9a', borderDash: [6, 6], pointRadius: 0, borderWidth: 1 } ] },
+  options: { animation: false, responsive: true, maintainAspectRatio: false, parsing: false,
+    scales: { x: { type: 'linear', title: { display: true, text: 'LLM call #', color: '#9a9a9a' }, ticks: { color: '#9a9a9a' }, grid: { color: '#2a2a2a' } },
+              y: { beginAtZero: true, ticks: { color: '#9a9a9a' }, grid: { color: '#2a2a2a' }, title: { display: true, text: 'input tokens', color: '#9a9a9a' } } },
+    plugins: { legend: { labels: { color: '#f2f2f2', font: { size: 14 } } } } } });
+
+const lifeChart = new Chart($('lifecycle'), { type: 'bar', data: { labels: [], datasets: [] },
+  options: { animation: false, responsive: true, maintainAspectRatio: false,
+    scales: { x: { stacked: true, ticks: { color: '#9a9a9a', maxTicksLimit: 10 }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#9a9a9a' }, grid: { color: '#2a2a2a' } } },
+    plugins: { legend: { labels: { color: '#f2f2f2', font: { size: 13 } } } } } });
+const LIFE_COLORS = { fact_created: '#9a9a9a', fact_promoted: '#7dd3fc', fact_superseded: '#c8ff00', fact_contradicted: '#ffb020', fact_evicted: '#ff4d4d', fact_expired: '#ff7a00' };
+
+let cfg = { token_budget: 6000 };
+async function refresh() {
+  try {
+    const [stats, board, tok, life, mem, les] = await Promise.all([
+      api('run_stats'), api('board'), api('token_metrics', { limit: 600 }), api('fact_lifecycle'), api('memory_feed', { limit: 40 }), api('lessons', { limit: 30 })]);
+    const s = stats[0] || {};
+    $('since').textContent = hhmm(s.first_ts); $('cycles').textContent = s.cycles || 0; $('steps').textContent = s.steps || 0;
+    $('pages').textContent = s.pages_read || 0; $('maxtok').textContent = (s.max_input_tokens || 0).toLocaleString();
+    $('cost').textContent = '$' + (s.est_cost_usd || 0).toFixed(2);
+    $('mode').textContent = `run ${cfg.run_id} · ${cfg.llm_provider} · ${cfg.store === 'local-jsonl' ? 'local store' : 'rawtree'} · ${s.resumes || 0} resumes · ${s.errors || 0} errors · ${new Date().toLocaleTimeString()}`;
+
+    // token chart
+    const lethe = tok.filter(r => r.agent === 'lethe').map(r => ({ x: r.step, y: r.input_tokens }));
+    const naive = tok.filter(r => r.agent === 'naive').map(r => ({ x: r.step, y: r.input_tokens }));
+    const maxX = Math.max(lethe.length ? lethe[lethe.length - 1].x : 0, naive.length ? naive[naive.length - 1].x : 0, 10);
+    tokChart.data.datasets[0].data = lethe; tokChart.data.datasets[1].data = naive;
+    tokChart.data.datasets[2].data = [{ x: 0, y: cfg.token_budget }, { x: maxX, y: cfg.token_budget }];
+    tokChart.update();
+    const last = lethe.length ? lethe[lethe.length - 1].y : 0;
+    $('tokhead').textContent = `Lethe last ${last.toLocaleString()} · max ${(s.max_input_tokens || 0).toLocaleString()} · budget ${cfg.token_budget.toLocaleString()}` + (naive.length ? ` · naive reached ${naive[naive.length - 1].y.toLocaleString()}` : '');
+
+    // lifecycle chart
+    const minutes = [...new Set(life.map(r => r.minute))].sort().slice(-40);
+    const kinds = Object.keys(LIFE_COLORS);
+    lifeChart.data.labels = minutes.map(m => m.slice(11));
+    lifeChart.data.datasets = kinds.map(k => ({ label: k.replace('fact_', ''), backgroundColor: LIFE_COLORS[k], data: minutes.map(m => (life.find(r => r.minute === m && r.event_type === k) || {}).n || 0) }));
+    lifeChart.update();
+    const tot = (k) => life.filter(r => r.event_type === k).reduce((a, r) => a + r.n, 0);
+    $('lifehead').textContent = `created ${tot('fact_created')} · promoted ${tot('fact_promoted')} · evicted ${tot('fact_evicted')} · contradicted ${tot('fact_contradicted')} · expired ${tot('fact_expired')}`;
+
+    // board
+    $('board').innerHTML = COLS.map(c => {
+      const cards = board.filter(u => u.status === c);
+      return `<div class="col ${c}"><h3>${NAMES[c]} <i>${cards.length}</i></h3>` + cards.map(u => {
+        const d = u.current_reco && u.our_price ? (u.current_reco - u.our_price) / u.our_price * 100 : 0;
+        return `<div class="card"><div class="t">${u.label}</div>
+          <div class="p">${fmt$(u.current_reco)} <small>ours ${fmt$(u.our_price)} <span class="${d < 0 ? 'down' : 'up'}">${u.current_reco ? (d >= 0 ? '+' : '') + d.toFixed(1) + '%' : ''}</span></small></div>
+          <div class="m">conf ${(u.confidence * 100).toFixed(0)}% · ${u.comps_count} comps · ${u.strategy} · ${hhmm(u.last_checked)}</div>
+          ${u.reasoning ? `<div class="r">${u.reasoning}</div>` : ''}</div>`; }).join('') + '</div>'; }).join('');
+
+    // memory feed
+    $('memfeed').innerHTML = mem.map(r => { const p = JSON.parse(r.payload || '{}');
+      const what = `${r.unit_id} ${p.subject || ''} ${p.predicate || ''}`.trim();
+      const why = p.reason || (p.old != null ? `${p.old} → ${p.new}` : '') || (p.sources ? `2 sources` : '') || (p.age_s ? `age ${Math.round(p.age_s / 60)}m > ttl ${Math.round(p.ttl / 60)}m` : '');
+      return `<li><span class="ts">${hhmmss(r.ts)}</span><span class="k ${r.event_type}">${r.event_type.replace('fact_', '')}</span><span>${what} <span style="color:#8b98a8">${why}</span></span></li>`; }).join('');
+    $('memhead').textContent = `${mem.length} recent`;
+
+    // lessons
+    $('lessons').innerHTML = les.map(r => { const p = JSON.parse(r.payload || '{}');
+      const txt = r.event_type === 'lesson' ? p.lesson : r.event_type === 'strategy_changed' ? `${p.from} → ${p.to}${p.because ? ' · ' + p.because : ''}` : `fixed via ${p.new_strategy}: ${p.comps} comps (was ${p.failed_strategy})`;
+      return `<li><span class="ts">${hhmmss(r.ts)}</span><span class="k ${r.event_type}">${r.event_type.replace('_', ' ')}</span><span>${r.unit_id} · ${txt}</span></li>`; }).join('');
+  } catch (e) { console.error(e); $('mode').textContent = 'refresh error: ' + e; }
+}
+(async () => { cfg = await (await fetch('/api/config')).json(); await refresh(); setInterval(refresh, 5000); })();
+</script>
+</body>
+</html>

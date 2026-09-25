@@ -1,0 +1,44 @@
+# Lethe mission config. The runtime is mission-agnostic; this file is the mission.
+mission_id: rv_pricing
+goal: >
+  Keep our used RV / auto inventory priced competitively against the live web market.
+  For every unit, find comparable listings, verify they are comparable, notice market
+  changes (new comps, price drops, sold/removed listings), and maintain a price
+  recommendation with reasoning and confidence.
+
+inventory: data/inventory.csv
+
+comparability:
+  year_tolerance: 1          # same year +/- 1
+  mileage_band_pct: 40       # comp mileage within +/-40% of ours (or +/- 15k mi)
+  mileage_band_abs: 15000
+  radius_miles: 500          # approximated by the state adjacency list below
+  region_strict: false       # national listing sites: out-of-region comps count, but lower confidence
+  min_comps_for_verified: 3
+  min_sources_for_canon: 2   # independent domains required to promote a fact to canon
+
+refresh:
+  price_ttl_seconds: 7200        # a listing's asking price
+  existence_ttl_seconds: 21600   # that a listing exists at all
+  reco_stale_after_seconds: 600  # re-scout a unit after this (10 min => every ~5 cycles at 120s)
+  low_confidence_threshold: 0.55
+
+pricing:
+  target_percentile: 0.45    # price slightly under median to move inventory
+  max_change_pct: 12         # never recommend more than +/-12% change per cycle
+
+strategies:                  # the Chief picks one per unit; the Auditor's lessons steer it
+  - broad                    # generic web search: "<year> <make> <model> for sale"
+  - rvtrader                 # site:rvtrader.com
+  - rvusa                    # site:rvusa.com
+  - autotrader               # site:autotrader.com (trucks)
+  - cars_com                 # site:cars.com (trucks)
+  - marketplace              # site:facebook.com/marketplace OR craigslist
+
+region_adjacency:            # "within radius" approximation for the Auditor
+  CA: [CA, NV, OR, AZ]
+  TX: [TX, OK, NM, LA, AR]
+  FL: [FL, GA, AL]
+  CO: [CO, UT, WY, NM, KS, NE]
+  WA: [WA, OR, ID]
+  AZ: [AZ, CA, NV, NM, UT]

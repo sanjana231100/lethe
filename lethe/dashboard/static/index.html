@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lethe · agents that forget on purpose</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#0b0f14; --panel:#121820; --line:#1f2a36; --text:#e6edf3; --muted:#8b98a8; --accent:#4cc9f0; --good:#3ddc97; --warn:#ffb454; --bad:#ff6b6b; --naive:#ff6b6b; --lethe:#3ddc97; --canon:#b388ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif; font-size:18px; }
+  header { display:flex; align-items:baseline; gap:20px; padding:18px 28px 6px; }
+  header h1 { margin:0; font-size:34px; letter-spacing:.5px; }
+  header h1 span { color:var(--accent); }
+  header .tag { color:var(--muted); font-size:17px; }
+  header .mode { margin-left:auto; color:var(--muted); font-size:15px; }
+  .hero { display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; padding:10px 28px; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; }
+  .stat .v { font-size:34px; font-weight:700; line-height:1.1; }
+  .stat .l { color:var(--muted); font-size:14px; margin-top:4px; text-transform:uppercase; letter-spacing:.06em; }
+  .grid { display:grid; grid-template-columns: 1.25fr 1fr; gap:14px; padding:6px 28px 28px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; min-height:220px; }
+  .panel h2 { margin:0 0 8px; font-size:17px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; font-weight:600; }
+  .panel h2 b { color:var(--text); font-weight:700; text-transform:none; letter-spacing:0; font-size:18px; margin-left:8px; }
+  .wide { grid-column: 1 / -1; }
+  .board { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; }
+  .col h3 { margin:0 0 8px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; display:flex; justify-content:space-between; }
+  .col h3 i { font-style:normal; background:var(--line); border-radius:10px; padding:0 8px; }
+  .card { background:#0e141b; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .card .t { font-weight:700; font-size:16px; }
+  .card .p { font-size:24px; font-weight:700; margin:4px 0 2px; }
+  .card .p small { font-size:14px; color:var(--muted); font-weight:500; }
+  .card .m { color:var(--muted); font-size:13px; }
+  .card .r { color:#b9c4d0; font-size:13px; margin-top:6px; line-height:1.3; }
+  .col.scouting .card { border-left-color:var(--accent); } .col.needs_verify .card { border-left-color:var(--warn); }
+  .col.verified .card { border-left-color:var(--good); } .col.action .card { border-left-color:var(--canon); } .col.stale .card { border-left-color:var(--bad); }
+  .feed { list-style:none; margin:0; padding:0; max-height:330px; overflow:auto; font-size:15px; }
+  .feed li { padding:6px 0; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:baseline; }
+  .feed .ts { color:var(--muted); font-variant-numeric: tabular-nums; font-size:13px; min-width:64px; }
+  .feed .k { font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; min-width:112px; }
+  .k.fact_evicted, .k.fact_expired { color:var(--bad); } .k.fact_contradicted { color:var(--warn); } .k.fact_promoted { color:var(--canon); } .k.fact_superseded { color:var(--accent); }
+  .k.lesson { color:var(--warn); } .k.strategy_changed { color:var(--accent); } .k.self_correction { color:var(--good); }
+  .chartbox { position:relative; height:300px; }
+  .up { color:var(--good); } .down { color:var(--bad); }
+  .foot { color:var(--muted); font-size:13px; padding:0 28px 20px; }
+  @media (max-width: 1100px) { .hero { grid-template-columns: repeat(3,1fr);} .grid { grid-template-columns: 1fr; } .board { grid-template-columns: repeat(2,1fr);} }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Lethe</span> · agents that forget on purpose</h1>
+  <div class="tag">garbage-collected memory · live RV pricing mission</div>
+  <div class="mode" id="mode">…</div>
+</header>
+
+<section class="hero">
+  <div class="stat"><div class="v" id="since">–</div><div class="l">running since</div></div>
+  <div class="stat"><div class="v" id="cycles">0</div><div class="l">cycles</div></div>
+  <div class="stat"><div class="v" id="steps">0</div><div class="l">steps</div></div>
+  <div class="stat"><div class="v" id="pages">0</div><div class="l">pages read</div></div>
+  <div class="stat"><div class="v" id="maxtok">0</div><div class="l">max context (tokens)</div></div>
+  <div class="stat"><div class="v" id="cost">$0</div><div class="l">est. LLM cost</div></div>
+</section>
+
+<section class="grid">
+  <div class="panel">
+    <h2>Input tokens per LLM call <b id="tokhead"></b></h2>
+    <div class="chartbox"><canvas id="tokens"></canvas></div>
+  </div>
+  <div class="panel">
+    <h2>Fact lifecycle <b id="lifehead"></b></h2>
+    <div class="chartbox"><canvas id="lifecycle"></canvas></div>
+  </div>
+
+  <div class="panel wide">
+    <h2>Board <b>position derived from facts, never set by hand</b></h2>
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Memory GC feed <b id="memhead"></b></h2>
+    <ul class="feed" id="memfeed"></ul>
+  </div>
+  <div class="panel">
+    <h2>Lessons · self-corrections</h2>
+    <ul class="feed" id="lessons"></ul>
+  </div>
+</section>
+<div class="foot" id="foot">Nimble = eyes · Liquid LFM2.5 = memory GC · RawTree = state + observability · refresh 5s</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt$ = (n) => n ? '$' + Math.round(n).toLocaleString() : '–';
+const api = async (p, q = {}) => { const u = new URL('/api/' + p, location.origin); Object.entries(q).forEach(([k, v]) => v != null && u.searchParams.set(k, v)); const r = await fetch(u); return (await r.json()).data || []; };
+const hhmm = (ts) => ts ? ts.slice(11, 16) : '–';
+const hhmmss = (ts) => ts ? ts.slice(11, 19) : '';
+const COLS = ['scouting', 'needs_verify', 'verified', 'action', 'stale'];
+const NAMES = { scouting: 'Scouting', needs_verify: 'Needs verify', verified: 'Verified', action: 'Action', stale: 'Stale' };
+
+const tokChart = new Chart($('tokens'), { type: 'line', data: { datasets: [
+  { label: 'Lethe (bounded)', data: [], borderColor: '#3ddc97', backgroundColor: '#3ddc9733', pointRadius: 0, borderWidth: 2.5, tension: .2, fill: true },
+  { label: 'Naive (append everything)', data: [], borderColor: '#ff6b6b', backgroundColor: '#ff6b6b22', pointRadius: 0, borderWidth: 2.5, tension: .2, fill: true },
+  { label: 'budget', data: [], borderColor: '#8b98a8', borderDash: [6, 6], pointRadius: 0, borderWidth: 1 } ] },
+  options: { animation: false, responsive: true, maintainAspectRatio: false, parsing: false,
+    scales: { x: { type: 'linear', title: { display: true, text: 'LLM call #', color: '#8b98a8' }, ticks: { color: '#8b98a8' }, grid: { color: '#1f2a36' } },
+              y: { beginAtZero: true, ticks: { color: '#8b98a8' }, grid: { color: '#1f2a36' }, title: { display: true, text: 'input tokens', color: '#8b98a8' } } },
+    plugins: { legend: { labels: { color: '#e6edf3', font: { size: 14 } } } } } });
+
+const lifeChart = new Chart($('lifecycle'), { type: 'bar', data: { labels: [], datasets: [] },
+  options: { animation: false, responsive: true, maintainAspectRatio: false,
+    scales: { x: { stacked: true, ticks: { color: '#8b98a8', maxTicksLimit: 10 }, grid: { display: false } }, y: { stacked: true, ticks: { color: '#8b98a8' }, grid: { color: '#1f2a36' } } },
+    plugins: { legend: { labels: { color: '#e6edf3', font: { size: 13 } } } } } });
+const LIFE_COLORS = { fact_created: '#4cc9f0', fact_promoted: '#b388ff', fact_superseded: '#3ddc97', fact_contradicted: '#ffb454', fact_evicted: '#ff6b6b', fact_expired: '#c0392b' };
+
+let cfg = { token_budget: 6000 };
+async function refresh() {
+  try {
+    const [stats, board, tok, life, mem, les] = await Promise.all([
+      api('run_stats'), api('board'), api('token_metrics', { limit: 600 }), api('fact_lifecycle'), api('memory_feed', { limit: 40 }), api('lessons', { limit: 30 })]);
+    const s = stats[0] || {};
+    $('since').textContent = hhmm(s.first_ts); $('cycles').textContent = s.cycles || 0; $('steps').textContent = s.steps || 0;
+    $('pages').textContent = s.pages_read || 0; $('maxtok').textContent = (s.max_input_tokens || 0).toLocaleString();
+    $('cost').textContent = '$' + (s.est_cost_usd || 0).toFixed(2);
+    $('mode').textContent = `run ${cfg.run_id} · ${cfg.llm_provider} · ${cfg.store === 'local-jsonl' ? 'local store' : 'rawtree'} · ${s.resumes || 0} resumes · ${s.errors || 0} errors · ${new Date().toLocaleTimeString()}`;
+
+    // token chart
+    const lethe = tok.filter(r => r.agent === 'lethe').map(r => ({ x: r.step, y: r.input_tokens }));
+    const naive = tok.filter(r => r.agent === 'naive').map(r => ({ x: r.step, y: r.input_tokens }));
+    const maxX = Math.max(lethe.length ? lethe[lethe.length - 1].x : 0, naive.length ? naive[naive.length - 1].x : 0, 10);
+    tokChart.data.datasets[0].data = lethe; tokChart.data.datasets[1].data = naive;
+    tokChart.data.datasets[2].data = [{ x: 0, y: cfg.token_budget }, { x: maxX, y: cfg.token_budget }];
+    tokChart.update();
+    const last = lethe.length ? lethe[lethe.length - 1].y : 0;
+    $('tokhead').textContent = `Lethe last ${last.toLocaleString()} · max ${(s.max_input_tokens || 0).toLocaleString()} · budget ${cfg.token_budget.toLocaleString()}` + (naive.length ? ` · naive reached ${naive[naive.length - 1].y.toLocaleString()}` : '');
+
+    // lifecycle chart
+    const minutes = [...new Set(life.map(r => r.minute))].sort().slice(-40);
+    const kinds = Object.keys(LIFE_COLORS);
+    lifeChart.data.labels = minutes.map(m => m.slice(11));
+    lifeChart.data.datasets = kinds.map(k => ({ label: k.replace('fact_', ''), backgroundColor: LIFE_COLORS[k], data: minutes.map(m => (life.find(r => r.minute === m && r.event_type === k) || {}).n || 0) }));
+    lifeChart.update();
+    const tot = (k) => life.filter(r => r.event_type === k).reduce((a, r) => a + r.n, 0);
+    $('lifehead').textContent = `created ${tot('fact_created')} · promoted ${tot('fact_promoted')} · evicted ${tot('fact_evicted')} · contradicted ${tot('fact_contradicted')} · expired ${tot('fact_expired')}`;
+
+    // board
+    $('board').innerHTML = COLS.map(c => {
+      const cards = board.filter(u => u.status === c);
+      return `<div class="col ${c}"><h3>${NAMES[c]} <i>${cards.length}</i></h3>` + cards.map(u => {
+        const d = u.current_reco && u.our_price ? (u.current_reco - u.our_price) / u.our_price * 100 : 0;
+        return `<div class="card"><div class="t">${u.label}</div>
+          <div class="p">${fmt$(u.current_reco)} <small>ours ${fmt$(u.our_price)} <span class="${d < 0 ? 'down' : 'up'}">${u.current_reco ? (d >= 0 ? '+' : '') + d.toFixed(1) + '%' : ''}</span></small></div>
+          <div class="m">conf ${(u.confidence * 100).toFixed(0)}% · ${u.comps_count} comps · ${u.strategy} · ${hhmm(u.last_checked)}</div>
+          ${u.reasoning ? `<div class="r">${u.reasoning}</div>` : ''}</div>`; }).join('') + '</div>'; }).join('');
+
+    // memory feed
+    $('memfeed').innerHTML = mem.map(r => { const p = JSON.parse(r.payload || '{}');
+      const what = `${r.unit_id} ${p.subject || ''} ${p.predicate || ''}`.trim();
+      const why = p.reason || (p.old != null ? `${p.old} → ${p.new}` : '') || (p.sources ? `2 sources` : '') || (p.age_s ? `age ${Math.round(p.age_s / 60)}m > ttl ${Math.round(p.ttl / 60)}m` : '');
+      return `<li><span class="ts">${hhmmss(r.ts)}</span><span class="k ${r.event_type}">${r.event_type.replace('fact_', '')}</span><span>${what} <span style="color:#8b98a8">${why}</span></span></li>`; }).join('');
+    $('memhead').textContent = `${mem.length} recent`;
+
+    // lessons
+    $('lessons').innerHTML = les.map(r => { const p = JSON.parse(r.payload || '{}');
+      const txt = r.event_type === 'lesson' ? p.lesson : r.event_type === 'strategy_changed' ? `${p.from} → ${p.to}${p.because ? ' · ' + p.because : ''}` : `fixed via ${p.new_strategy}: ${p.comps} comps (was ${p.failed_strategy})`;
+      return `<li><span class="ts">${hhmmss(r.ts)}</span><span class="k ${r.event_type}">${r.event_type.replace('_', ' ')}</span><span>${r.unit_id} · ${txt}</span></li>`; }).join('');
+  } catch (e) { console.error(e); $('mode').textContent = 'refresh error: ' + e; }
+}
+(async () => { cfg = await (await fetch('/api/config')).json(); await refresh(); setInterval(refresh, 5000); })();
+</script>
+</body>
+</html>
