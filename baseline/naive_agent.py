@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import time
 from typing import Any
 
@@ -22,6 +23,11 @@ from lethe.runtime.events import EventLog
 from lethe.runtime.mission import load_mission, load_units
 from lethe.store.base import make_store
 from lethe.tools.nimble import MockNimble, make_nimble
+from lethe.agents.scout import _truncate_tokens
+
+# Even a naive agent truncates pages; this keeps step 1 under the provider's request cap so the
+# climb is visible for several steps before the wall (Groq free tier refuses > ~8k tokens/request).
+PAGE_TOKENS = int(os.environ.get("NAIVE_PAGE_TOKENS", "350"))
 
 NAIVE_SYSTEM = ("You are a pricing agent. Use the whole conversation so far to keep track of listings and prices. "
                 "Reply with JSON {\"thought\": \"...\", \"recommendation\": <number>, \"next_unit\": \"...\"}")
@@ -66,7 +72,7 @@ async def main(steps: int, max_tokens: int) -> None:
             pages = []
             for r in results[:3]:
                 page = r.content or (await nimble.extract(r.url)).text
-                pages.append(f"URL: {r.url}\n{page}")
+                pages.append(f"URL: {r.url}\n{_truncate_tokens(page, PAGE_TOKENS)}")
             print(f"   {len(pages)} pages appended; calling the model with the whole history (may wait for rate limit) ...", flush=True)
         except Exception as exc:
             await log.error("naive", "nimble", exc, unit_id=unit.unit_id)
@@ -80,6 +86,9 @@ async def main(steps: int, max_tokens: int) -> None:
         try:
             res = await llm.complete(NAIVE_SYSTEM, history, meta={"payload": {"suggested": unit.our_price, "next_unit": unit.unit_id}})
         except Exception as exc:  # e.g. provider refuses the oversized prompt: that *is* the wall
+            # record the refused attempt so the chart shows where the climb ended
+            await log.emit("naive", "llm_call", unit_id=unit.unit_id, payload={"role": "naive", "step": step + 1, "refused": True},
+                           input_tokens=prompt_tokens, output_tokens=0, latency_ms=0, model="refused")
             await log.emit("naive", "context_overflow", unit_id=unit.unit_id,
                            payload={"step": step + 1, "prompt_tokens": prompt_tokens, "error": f"{type(exc).__name__}: {exc}"[:300]})
             print(f"stopped at step {step + 1}: the provider refused a {prompt_tokens}-token prompt ({type(exc).__name__}). That's the wall.")
