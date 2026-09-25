@@ -89,7 +89,8 @@ class RawTreeStore(StateStore):
         r = await self._client.post(f"{self.api_url}/v1/query", json={"sql": statement, "format": "JSON"})
         if r.status_code >= 500 or r.status_code == 429:
             r.raise_for_status()
-        if r.status_code == 404 or (r.status_code == 400 and "doesn't exist" in r.text.lower()):
+        low = r.text.lower()
+        if r.status_code in (400, 404) and any(k in low for k in ("doesn't exist", "does not exist", "unknown table", "unknown_table", "not found", "no such table")):
             return []      # table not created yet (first boot)
         if r.status_code >= 400:
             raise RuntimeError(f"rawtree query {r.status_code}: {r.text[:300]}")

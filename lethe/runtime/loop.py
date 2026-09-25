@@ -45,8 +45,12 @@ class Runtime:
     # ------------------------------------------------------------------ boot / resume
     async def boot(self) -> Ledger:
         t0 = time.perf_counter()
-        ledger = await self.store.current_ledger(self.cfg.run_id)
-        facts = await self.store.active_facts(self.cfg.run_id)
+        print(f"booting run '{self.cfg.run_id}' from {self.store.name} ...")
+        try:
+            ledger = await self.store.current_ledger(self.cfg.run_id)
+            facts = await self.store.active_facts(self.cfg.run_id)
+        except Exception as exc:
+            raise RuntimeError(f"cannot read state from {self.store.name}: {exc}") from exc
         if ledger is None:
             ledger = new_ledger(self.mission, self.units)
             await self.log.emit("system", "started", payload={"config": self.cfg.summary(), "units": list(self.units)})

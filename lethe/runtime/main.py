@@ -38,8 +38,17 @@ async def _run(rt: Runtime) -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     task = asyncio.create_task(rt.run_forever())
-    await stop.wait()
+    stopper = asyncio.create_task(stop.wait())
+    done, _ = await asyncio.wait({task, stopper}, return_when=asyncio.FIRST_COMPLETED)
+    if task in done and task.exception() is not None:
+        console.print(f"[red]runtime died: {task.exception()!r}[/red]")
+        stopper.cancel()
+        return
     task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, Exception):
+        pass
     await rt.store.flush()
     console.print("[yellow]stopped; state is in the store — `resume` picks up from the last ledger_snapshot[/yellow]")
 
@@ -60,15 +69,15 @@ def main(argv: list[str] | None = None) -> int:
 
     rt = Runtime(settings, quiet=args.quiet)
     console.print(Panel(json.dumps(rt.cfg.summary(), indent=1), title="lethe", expand=False))
-    try:
-        if args.command == "once":
-            asyncio.run(_once(rt))
-        elif args.command in ("run", "resume"):
-            asyncio.run(_run(rt))
-        elif args.command == "status":
-            asyncio.run(_status(rt))
-    finally:
-        asyncio.run(rt.close())
+    fn = {"once": _once, "run": _run, "resume": _run, "status": _status}[args.command]
+
+    async def go() -> None:
+        try:
+            await fn(rt)
+        finally:
+            await rt.close()
+
+    asyncio.run(go())
     return 0
 
 
