@@ -61,11 +61,13 @@ async def main(steps: int, max_tokens: int) -> None:
         MockNimble.set_cycle(step // len(units))
         query = f"{unit.year} {unit.make} {unit.model} {unit.trim} for sale"
         try:
+            print("   fetching live pages via Nimble (10-30s) ...", flush=True)
             results = await nimble.search(query, count=4)
             pages = []
             for r in results[:3]:
                 page = r.content or (await nimble.extract(r.url)).text
                 pages.append(f"URL: {r.url}\n{page}")
+            print(f"   {len(pages)} pages appended; calling the model with the whole history (may wait for rate limit) ...", flush=True)
         except Exception as exc:
             await log.error("naive", "nimble", exc, unit_id=unit.unit_id)
             pages = []
@@ -85,6 +87,7 @@ async def main(steps: int, max_tokens: int) -> None:
         await log.emit("naive", "llm_call", unit_id=unit.unit_id, payload={"role": "naive", "step": step + 1, "history_messages": len(history)},
                        input_tokens=res.input_tokens, output_tokens=res.output_tokens, latency_ms=res.latency_ms, model=res.model)
         history.append({"role": "assistant", "content": res.text})
+        print(f"   done: prompt was {res.input_tokens} tokens", flush=True)
         await store.flush()
     await log.emit("naive", "finished", payload={"steps": len([m for m in history if m["role"] == "assistant"]),
                                                   "final_prompt_tokens": count_tokens(NAIVE_SYSTEM) + sum(count_tokens(m["content"]) for m in history)})
