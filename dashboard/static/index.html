@@ -99,8 +99,9 @@ const $ = (id) => document.getElementById(id);
 const fmt$ = (n) => n ? '$' + Math.round(n).toLocaleString() : '–';
 const apiErrors = {};
 const api = async (p, q = {}) => { const u = new URL('/api/' + p, location.origin); Object.entries(q).forEach(([k, v]) => v != null && u.searchParams.set(k, v)); const r = await fetch(u); const j = await r.json(); if (j.error) apiErrors[p] = j.error; else delete apiErrors[p]; return j.data || []; };
-const hhmm = (ts) => ts ? ts.slice(11, 16) : '–';
-const hhmmss = (ts) => ts ? ts.slice(11, 19) : '';
+const local = (ts) => ts ? new Date(ts.replace(' ', 'T').slice(0, 23) + 'Z') : null;   // store timestamps are UTC
+const hhmm = (ts) => { const d = local(ts); return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '–'; };
+const hhmmss = (ts) => { const d = local(ts); return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''; };
 const COLS = ['scouting', 'needs_verify', 'verified', 'action', 'stale'];
 const NAMES = { scouting: 'Scouting', needs_verify: 'Needs verify', verified: 'Verified', action: 'Action', stale: 'Stale' };
 
@@ -144,7 +145,7 @@ async function refresh() {
     // lifecycle chart
     const minutes = [...new Set(life.map(r => r.minute))].sort().slice(-40);
     const kinds = Object.keys(LIFE_COLORS);
-    lifeChart.data.labels = minutes.map(m => m.slice(11));
+    lifeChart.data.labels = minutes.map(m => hhmm(m + ':00.000'));
     lifeChart.data.datasets = kinds.map(k => ({ label: k.replace('fact_', ''), backgroundColor: LIFE_COLORS[k], data: minutes.map(m => (life.find(r => r.minute === m && r.event_type === k) || {}).n || 0) }));
     lifeChart.update();
     const tot = (k) => life.filter(r => r.event_type === k).reduce((a, r) => a + r.n, 0);
