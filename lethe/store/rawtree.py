@@ -110,6 +110,7 @@ class RawTreeStore(StateStore):
         t = now()
         out = []
         for r in rows:
+            r["fact_id"] = r.pop("fid", r.get("fact_id"))
             f = Fact(run_id=run_id, **{k: v for k, v in r.items() if k in Fact.model_fields and k != "run_id"})
             if not f.is_expired(t):
                 out.append(f)
@@ -133,13 +134,17 @@ class RawTreeStore(StateStore):
         if pipe == "token_metrics":
             return await self.sql(sql.token_metrics(run_id, limit or 600))
         if pipe == "fact_lifecycle":
-            return await self.sql(sql.fact_lifecycle(run_id))
+            rows = await self.sql(sql.fact_lifecycle(run_id))
+            return [{"minute": r["minute"], "event_type": r["et"], "n": r["n"]} for r in rows]
         if pipe == "memory_feed":
             return await self.sql(sql.memory_feed(run_id, limit or 40))
         if pipe == "lessons":
             return await self.sql(sql.lessons(run_id, limit or 30))
         if pipe == "run_stats":
             rows = await self.sql(sql.run_stats(run_id))
+            for r in rows:
+                r["input_tokens"] = r.pop("in_tok", 0)
+                r["output_tokens"] = r.pop("out_tok", 0)
             return [r for r in rows if r.get("first_ts")]
         if pipe == "recent_events":
             return await self.sql(sql.recent_events(run_id, limit or 50, p.get("event_type")))

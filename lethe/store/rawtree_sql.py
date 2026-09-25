@@ -34,22 +34,24 @@ ORDER BY ts_ms DESC LIMIT 1"""
 
 def latest_facts(run_id: str) -> str:
     """Latest version per fact_id (TTL expiry is applied in Python by the store)."""
-    return f"""SELECT fact_id,
-  argMax(unit_id, ts_ms) AS unit_id, argMax(subject, ts_ms) AS subject, argMax(predicate, ts_ms) AS predicate,
-  argMax(toString(value), ts_ms) AS value, argMax(source_url, ts_ms) AS source_url,
-  argMax(toString(observed_at), ts_ms) AS observed_at, argMax(confidence, ts_ms) AS confidence,
-  argMax(ttl_seconds, ts_ms) AS ttl_seconds, argMax(generation, ts_ms) AS generation, argMax(status, ts_ms) AS status,
-  argMax(toString(ts), ts_ms) AS ts
+    # RawTree columns are Dynamic; aggregates need explicit casts.
+    return f"""SELECT toString(fact_id) AS fid,
+  argMax(toString(unit_id), toInt64(ts_ms)) AS unit_id, argMax(toString(subject), toInt64(ts_ms)) AS subject,
+  argMax(toString(predicate), toInt64(ts_ms)) AS predicate, argMax(toString(value), toInt64(ts_ms)) AS value,
+  argMax(toString(source_url), toInt64(ts_ms)) AS source_url, argMax(toString(observed_at), toInt64(ts_ms)) AS observed_at,
+  argMax(toFloat64(confidence), toInt64(ts_ms)) AS confidence, argMax(toUInt32(ttl_seconds), toInt64(ts_ms)) AS ttl_seconds,
+  argMax(toString(generation), toInt64(ts_ms)) AS generation, argMax(toString(status), toInt64(ts_ms)) AS status,
+  argMax(toString(ts), toInt64(ts_ms)) AS ts
 FROM {FACTS}
 WHERE run_id = {q(run_id)}
-GROUP BY fact_id
+GROUP BY fid
 HAVING status = 'active'
 LIMIT 10000"""
 
 
 def token_metrics(run_id: str, limit: int = 600) -> str:
     return f"""SELECT toString(ts) AS ts, agent, component, input_tokens, output_tokens, latency_ms, model,
-  row_number() OVER (PARTITION BY agent ORDER BY ts_ms) AS step
+  row_number() OVER (PARTITION BY toString(agent) ORDER BY toInt64(ts_ms)) AS step
 FROM {EVENTS}
 WHERE event_type = 'llm_call' AND (run_id = {q(run_id)} OR run_id = {q('naive-' + run_id)})
 ORDER BY ts_ms
@@ -57,40 +59,40 @@ LIMIT {int(limit)}"""
 
 
 def fact_lifecycle(run_id: str) -> str:
-    return f"""SELECT substring(toString(ts), 1, 16) AS minute, event_type, count() AS n
+    return f"""SELECT substring(toString(ts), 1, 16) AS minute, toString(event_type) AS et, count() AS n
 FROM {EVENTS}
-WHERE run_id = {q(run_id)} AND event_type IN {FACT_KINDS}
-GROUP BY minute, event_type
-ORDER BY minute, event_type
+WHERE run_id = {q(run_id)} AND toString(event_type) IN {FACT_KINDS}
+GROUP BY minute, et
+ORDER BY minute, et
 LIMIT 5000"""
 
 
 def memory_feed(run_id: str, limit: int = 40) -> str:
     return f"""SELECT toString(ts) AS ts, event_type, unit_id, toString(payload) AS payload
 FROM {EVENTS}
-WHERE run_id = {q(run_id)} AND event_type IN {GC_KINDS}
+WHERE run_id = {q(run_id)} AND toString(event_type) IN {GC_KINDS}
 ORDER BY ts_ms DESC LIMIT {int(limit)}"""
 
 
 def lessons(run_id: str, limit: int = 30) -> str:
     return f"""SELECT toString(ts) AS ts, event_type, unit_id, component, toString(payload) AS payload
 FROM {EVENTS}
-WHERE run_id = {q(run_id)} AND event_type IN {LESSON_KINDS}
+WHERE run_id = {q(run_id)} AND toString(event_type) IN {LESSON_KINDS}
 ORDER BY ts_ms DESC LIMIT {int(limit)}"""
 
 
 def run_stats(run_id: str) -> str:
     return f"""SELECT
-  toString(min(ts)) AS first_ts, toString(max(ts)) AS last_ts,
+  min(toString(ts)) AS first_ts, max(toString(ts)) AS last_ts,
   countIf(event_type = 'cycle_done') AS cycles,
-  countIf(event_type IN {STEP_KINDS}) AS steps,
+  countIf(toString(event_type) IN {STEP_KINDS}) AS steps,
   countIf(event_type = 'llm_call' AND agent = 'lethe') AS llm_calls,
   sumIf(JSONExtractInt(toString(payload), 'pages_read'), event_type = 'scout_done') AS pages_read,
-  sumIf(input_tokens, event_type = 'llm_call' AND agent = 'lethe') AS input_tokens,
-  sumIf(output_tokens, event_type = 'llm_call' AND agent = 'lethe') AS output_tokens,
-  maxIf(input_tokens, event_type = 'llm_call' AND agent = 'lethe') AS max_input_tokens,
-  argMaxIf(input_tokens, ts_ms, event_type = 'llm_call' AND agent = 'lethe') AS last_input_tokens,
-  round(input_tokens / 1e6 * 0.40 + output_tokens / 1e6 * 1.60, 4) AS est_cost_usd,
+  sumIf(toUInt64(input_tokens), event_type = 'llm_call' AND agent = 'lethe') AS in_tok,
+  sumIf(toUInt64(output_tokens), event_type = 'llm_call' AND agent = 'lethe') AS out_tok,
+  maxIf(toUInt64(input_tokens), event_type = 'llm_call' AND agent = 'lethe') AS max_input_tokens,
+  argMaxIf(toUInt64(input_tokens), toInt64(ts_ms), event_type = 'llm_call' AND agent = 'lethe') AS last_input_tokens,
+  round(in_tok / 1e6 * 0.40 + out_tok / 1e6 * 1.60, 4) AS est_cost_usd,
   countIf(event_type = 'resumed') AS resumes,
   countIf(event_type = 'error') AS errors
 FROM {EVENTS}

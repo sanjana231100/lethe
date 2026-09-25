@@ -97,7 +97,8 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const fmt$ = (n) => n ? '$' + Math.round(n).toLocaleString() : '–';
-const api = async (p, q = {}) => { const u = new URL('/api/' + p, location.origin); Object.entries(q).forEach(([k, v]) => v != null && u.searchParams.set(k, v)); const r = await fetch(u); return (await r.json()).data || []; };
+const apiErrors = {};
+const api = async (p, q = {}) => { const u = new URL('/api/' + p, location.origin); Object.entries(q).forEach(([k, v]) => v != null && u.searchParams.set(k, v)); const r = await fetch(u); const j = await r.json(); if (j.error) apiErrors[p] = j.error; else delete apiErrors[p]; return j.data || []; };
 const hhmm = (ts) => ts ? ts.slice(11, 16) : '–';
 const hhmmss = (ts) => ts ? ts.slice(11, 19) : '';
 const COLS = ['scouting', 'needs_verify', 'verified', 'action', 'stale'];
@@ -127,7 +128,8 @@ async function refresh() {
     $('since').textContent = hhmm(s.first_ts); $('cycles').textContent = s.cycles || 0; $('steps').textContent = s.steps || 0;
     $('pages').textContent = s.pages_read || 0; $('maxtok').textContent = (s.max_input_tokens || 0).toLocaleString();
     $('cost').textContent = '$' + (s.est_cost_usd || 0).toFixed(2);
-    $('mode').textContent = `run ${cfg.run_id} · ${cfg.llm_provider} · ${cfg.store === 'local-jsonl' ? 'local store' : 'rawtree'} · ${s.resumes || 0} resumes · ${s.errors || 0} errors · ${new Date().toLocaleTimeString()}`;
+    const errs = Object.entries(apiErrors); if (errs.length) console.error('store errors', apiErrors);
+    $('mode').textContent = (errs.length ? `⚠ ${errs[0][0]}: ${errs[0][1].slice(0, 90)} · ` : '') + `run ${cfg.run_id} · ${cfg.llm_provider} · ${cfg.store === 'local-jsonl' ? 'local store' : 'rawtree'} · ${s.resumes || 0} resumes · ${s.errors || 0} errors · ${new Date().toLocaleTimeString()}`;
 
     // token chart
     const lethe = tok.filter(r => r.agent === 'lethe').map(r => ({ x: r.step, y: r.input_tokens }));
